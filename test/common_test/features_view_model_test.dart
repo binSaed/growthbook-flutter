@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:growthbook_sdk_flutter/growthbook_sdk_flutter.dart';
+import 'package:growthbook_sdk_flutter/src/Cache/caching_manager.dart';
 import 'package:growthbook_sdk_flutter/src/Model/remote_eval_model.dart';
+import 'package:growthbook_sdk_flutter/src/Utils/constant.dart';
 
 import '../mocks/network_mock.dart';
 import '../mocks/network_view_model_mock.dart';
@@ -153,6 +158,36 @@ void main() {
 
         expect(dataSourceMock.isSuccess, true);
         expect(dataSourceMock.counterNetworkCall, 1);
+      });
+      test(
+          'corrupt cached data should not crash and should fall back to network',
+          () async {
+        featureViewModel = FeatureViewModel(
+          encryptionKey: '',
+          delegate: dataSourceMock,
+          source: FeatureDataSource(
+            client: const MockNetworkClient(),
+            context: context,
+          ),
+        );
+
+        // Write corrupt (invalid JSON) data to the cache
+        final corruptData = Uint8List.fromList(
+          utf8.encode('this is not valid json{{{'),
+        );
+        final manager = CachingManager();
+        manager.putData(
+          fileName: Constant.featureCache,
+          content: corruptData,
+        );
+
+        // Allow file write to complete
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // fetchFeatures should not throw — it should handle the corrupt
+        // cache gracefully and fall back to network
+        await featureViewModel.fetchFeatures(context.getFeaturesURL());
+        expect(dataSourceMock.isSuccess, true);
       });
     },
   );

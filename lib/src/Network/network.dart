@@ -69,8 +69,13 @@ class DioClient extends BaseClient {
             if (sseModel.name == "features" && lastKnownId != sseModel.id) {
               lastKnownId = sseModel.id;
               String jsonData = sseModel.data ?? "";
-              Map<String, dynamic> jsonMap = jsonDecode(jsonData);
-              onSuccess(jsonMap);
+              try {
+                Map<String, dynamic> jsonMap = jsonDecode(jsonData);
+                onSuccess(jsonMap);
+              } catch (e) {
+                log('Failed to parse SSE event data: $e');
+                onError(e, StackTrace.current);
+              }
             }
           },
           onError: (dynamic e, dynamic s) async {

@@ -65,10 +65,12 @@ class FeatureViewModel {
 
         if (receivedData != null) {
           final featureMap = _fetchCachedFeatures(receivedData);
-          delegate.featuresFetchedSuccessfully(
-            gbFeatures: featureMap,
-            isRemote: false,
-          );
+          if (featureMap != null) {
+            delegate.featuresFetchedSuccessfully(
+              gbFeatures: featureMap,
+              isRemote: false,
+            );
+          }
         }
 
         await _fetchRemoteEval(apiUrl, payload);
@@ -78,13 +80,18 @@ class FeatureViewModel {
 
         if (receivedData != null) {
           final featureMap = _fetchCachedFeatures(receivedData);
-          delegate.featuresFetchedSuccessfully(
-            gbFeatures: featureMap,
-            isRemote: false,
-          );
+          if (featureMap != null) {
+            delegate.featuresFetchedSuccessfully(
+              gbFeatures: featureMap,
+              isRemote: false,
+            );
 
-          // If cache is expired, fetch fresh data from network
-          if (isCacheExpired()) {
+            // If cache is expired, fetch fresh data from network
+            if (isCacheExpired()) {
+              await _fetchFromNetwork();
+            }
+          } else {
+            // Cache was corrupt and cleared, fetch from network
             await _fetchFromNetwork();
           }
         } else {
@@ -137,16 +144,22 @@ class FeatureViewModel {
     refreshExpiresAt();
   }
 
-  Map<String, GBFeature> _fetchCachedFeatures(Uint8List receivedData) {
-    final receivedDataJson = utf8Decoder.convert(receivedData);
-    final receiveFeatureJsonMap =
-        jsonDecode(receivedDataJson) as Map<String, dynamic>;
+  Map<String, GBFeature>? _fetchCachedFeatures(Uint8List receivedData) {
+    try {
+      final receivedDataJson = utf8Decoder.convert(receivedData);
+      final receiveFeatureJsonMap =
+          jsonDecode(receivedDataJson) as Map<String, dynamic>;
 
-    if (encryptionKey.isNotEmpty) {
-      const converter = GBFeaturesConverter();
-      return converter.fromJson(receiveFeatureJsonMap);
-    } else {
-      return FeaturedDataModel.fromJson(receiveFeatureJsonMap).features ?? {};
+      if (encryptionKey.isNotEmpty) {
+        const converter = GBFeaturesConverter();
+        return converter.fromJson(receiveFeatureJsonMap);
+      } else {
+        return FeaturedDataModel.fromJson(receiveFeatureJsonMap).features ?? {};
+      }
+    } catch (e) {
+      log('Failed to parse cached features, clearing corrupt cache: $e');
+      manager.clearCache();
+      return null;
     }
   }
 
